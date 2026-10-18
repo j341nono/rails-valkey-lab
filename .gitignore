@@ -7,5 +7,8 @@ references/
 /tmp/*
 /public/assets
 
+# 測定結果（開発環境の値はコミットしない）
+/results/
+
 # Ignore key files for decrypting credentials and more.
 /config/*.key
