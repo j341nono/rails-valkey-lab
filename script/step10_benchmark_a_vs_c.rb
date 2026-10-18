@@ -87,6 +87,9 @@ EVENT_SIZES.each do |events|
   memory << [ events, "postgresql", "page_views（A・C 共通）", table, index ]
   memory << [ events, "valkey", "日別キー（C のみ）", valkey_bytes("page_views:daily:*"), nil ]
   memory << [ events, "valkey", "集計結果キー（C のみ）", valkey_bytes("page_views:top:*"), nil ]
+  # Rails プロセスの RSS（データ準備の一括投入を含むので、A・C の差ではなく参考値）。Linux はピーク値、macOS は現在値
+  rss_kb = File.exist?("/proc/self/status") ? File.read("/proc/self/status")[/VmHWM:\s+(\d+)/, 1].to_i : `ps -o rss= -p #{Process.pid}`.to_i
+  memory << [ events, "rails", "プロセスの RSS（参考）", rss_kb * 1024, nil ]
 
   # --- 書き込み（1件ずつ create!）。A は Valkey 同期なし、C は after_create_commit で ZINCRBY ---
   { "A" => false, "C" => true }.each do |method, sync|
@@ -94,6 +97,9 @@ EVENT_SIZES.each do |events|
     write = -> { PageView.create!(article_id: WRITE_ARTICLE, viewed_at: Time.current) }
     ops << [ events, method, "write", *measure(runs: WRITES, warmup: 50, gc: false, &write), allocated_objects(&write) ]
   end
+  # C で増える分だけ（after_create_commit で実行する ZINCRBY + EXPIREAT の1往復）を単独で測る
+  increment = -> { PageView.new(article_id: WRITE_ARTICLE, viewed_at: Time.current).send(:increment_daily_ranking) }
+  ops << [ events, "C", "valkey_increment_only", *measure(runs: WRITES, warmup: 50, gc: false, &increment), allocated_objects(&increment) ]
   PageView.sync_valkey = true
   PageView.where(article_id: WRITE_ARTICLE).delete_all
   VALKEY.zrem(PageView.daily_key(TODAY), WRITE_ARTICLE)
@@ -113,3 +119,9 @@ CSV.open("results/step10_memory#{SUFFIX}.csv", "w") do |csv|
   memory.each { |row| csv << row + rtts + versions }
 end
 puts "saved: results/step10_*#{SUFFIX}.csv（NET_DELAY=#{ENV["NET_DELAY"].presence || "なし"}）"
+
+# CPU 上限（compose.yaml の cpus）による待ちが起きていないか（cgroup v2。コンテナで実行したときだけ表示）
+if File.exist?("/sys/fs/cgroup/cpu.stat")
+  stat = File.read("/sys/fs/cgroup/cpu.stat").lines.to_h { |l| l.split.then { |k, v| [ k, v.to_i ] } }
+  puts "app コンテナの CPU スロットリング: nr_periods=#{stat['nr_periods']} nr_throttled=#{stat['nr_throttled']} throttled_usec=#{stat['throttled_usec']}"
+end
