@@ -1,0 +1,108 @@
+# Step 10: 方式A（PostgreSQL のみ）と方式C（PostgreSQL + Valkey）を比較測定する
+# 実行: bin/rails runner script/step10_benchmark_a_vs_c.rb
+#       件数を変える場合: EVENTS=300000,3000000 bin/rails runner script/step10_benchmark_a_vs_c.rb
+# 結果: results/step10_ops.csv（書き込み・ランキング取得・再構築の時間）, results/step10_memory.csv
+require "csv"
+
+EVENT_SIZES = ENV.fetch("EVENTS", "300000,3000000").split(",").map(&:to_i) # 30日間の総イベント数
+ARTICLES = 10_000
+TODAY = Date.current # 保持期間（EXPIREAT）が実時刻で判定されるため、今日を基準にする
+FIRST_DAY = TODAY - (PageView::RETENTION_DAYS - 1)
+BATCH = 10_000
+WRITES = 1_000
+WRITE_ARTICLE = ARTICLES + 1 # 書き込み測定用の記事。測定後に消す
+
+ActiveRecord::Base.logger = nil                     # SQL ログの書き込み時間を測定に含めない
+ActiveRecord::Base.connection.disable_query_cache!  # 毎回 DB で集計させる
+DB = ActiveRecord::Base.connection
+
+def elapsed_ms
+  start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  yield
+  (Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000
+end
+
+# warmup 回空回ししてから runs 回測り、[中央値, p95, 最小, 最大] を返す
+def measure(runs:, warmup:, gc: true, &block)
+  warmup.times { block.call }
+  times = Array.new(runs) { GC.start if gc; elapsed_ms(&block) }.sort
+  [ times[runs / 2], times[(runs * 0.95).ceil - 1], times.first, times.last ].map { |t| t.round(3) }
+end
+
+# 1回の操作で Rails（Ruby）側が作るオブジェクト数
+def allocated_objects
+  before = GC.stat(:total_allocated_objects)
+  yield
+  GC.stat(:total_allocated_objects) - before
+end
+
+def valkey_bytes(pattern)
+  VALKEY.scan_each(match: pattern).sum { |key| VALKEY.call("MEMORY", "USAGE", key, "SAMPLES", "0").to_i }
+end
+
+versions = [ RUBY_VERSION, DB.select_value("SHOW server_version")[/\S+/], VALKEY.info("server")["valkey_version"] ]
+puts "Ruby #{versions[0]} / PostgreSQL #{versions[1]} / Valkey #{versions[2]}"
+ops = []
+memory = []
+
+EVENT_SIZES.each do |events|
+  # --- 準備（測定対象外。一括投入の時間は参考値） ---
+  DB.truncate("page_views")
+  VALKEY.scan_each(match: "page_views:*") { |key| VALKEY.del(key) }
+  rng = Random.new(42)
+  start_at = FIRST_DAY.in_time_zone.to_i
+  bulk_ms = (events / BATCH).times.sum do
+    rows = Array.new(BATCH) { { article_id: rng.rand(1..ARTICLES), viewed_at: Time.at(start_at + rng.rand(PageView::RETENTION_DAYS * 86_400)).utc } }
+    elapsed_ms { PageView.insert_all(rows) }
+  end
+  DB.execute("VACUUM ANALYZE page_views") # 統計情報を更新（実運用では autovacuum が行う）
+
+  # --- 同期コスト①: PostgreSQL から Valkey の日別 Sorted Set を作り直す（C の準備も兼ねる） ---
+  rebuild = measure(runs: 3, warmup: 0) { PageView.rebuild_valkey(from: FIRST_DAY, to: TODAY) }
+  ops << [ events, "C", "rebuild_valkey", *rebuild, allocated_objects { PageView.rebuild_valkey(from: FIRST_DAY, to: TODAY) } ]
+
+  # --- 正しさ: A と C の全順位が一致するか ---
+  [ false, true ].each do |weighted|
+    a = PageView.top_from_postgresql(today: TODAY, limit: nil, weighted:)
+    raise "不一致 (#{events}, weighted=#{weighted})" unless a == PageView.top_from_valkey(today: TODAY, limit: nil, weighted:)
+  end
+
+  # --- ランキング取得（Top 10） ---
+  { "A" => :top_from_postgresql, "C" => :top_from_valkey }.each do |method, finder|
+    [ false, true ].each do |weighted|
+      call = -> { PageView.public_send(finder, today: TODAY, weighted:) }
+      ops << [ events, method, weighted ? "ranking_weighted" : "ranking", *measure(runs: 11, warmup: 3, &call), allocated_objects(&call) ]
+    end
+  end
+
+  # --- メモリ（ランキング取得後なので Valkey の集計結果キーも含む） ---
+  table, index = DB.select_rows("SELECT pg_table_size('page_views'), pg_indexes_size('page_views')").first
+  memory << [ events, "postgresql", "page_views（A・C 共通）", table, index ]
+  memory << [ events, "valkey", "日別キー（C のみ）", valkey_bytes("page_views:daily:*"), nil ]
+  memory << [ events, "valkey", "集計結果キー（C のみ）", valkey_bytes("page_views:top:*"), nil ]
+
+  # --- 書き込み（1件ずつ create!）。A は Valkey 同期なし、C は after_create_commit で ZINCRBY ---
+  { "A" => false, "C" => true }.each do |method, sync|
+    PageView.sync_valkey = sync
+    write = -> { PageView.create!(article_id: WRITE_ARTICLE, viewed_at: Time.current) }
+    ops << [ events, method, "write", *measure(runs: WRITES, warmup: 50, gc: false, &write), allocated_objects(&write) ]
+  end
+  PageView.sync_valkey = true
+  PageView.where(article_id: WRITE_ARTICLE).delete_all
+  VALKEY.zrem(PageView.daily_key(TODAY), WRITE_ARTICLE)
+
+  puts "#{events} events（一括投入 #{(bulk_ms / 1000).round(1)} s・参考値）"
+  ops.select { |r| r[0] == events }.each { |r| puts format("  %s %-17s median %9.3f ms  p95 %9.3f ms", r[1], r[2], r[3], r[4]) }
+  memory.select { |r| r[0] == events }.each { |r| puts format("  %-10s %-24s %8.1f MB%s", r[1], r[2], r[3] / 1e6, r[4] ? format(" + index %.1f MB", r[4] / 1e6) : "") }
+end
+
+FileUtils.mkdir_p("results")
+CSV.open("results/step10_ops.csv", "w") do |csv|
+  csv << %w[events method operation median_ms p95_ms min_ms max_ms rails_allocated_objects ruby_version pg_version valkey_version]
+  ops.each { |row| csv << row + versions }
+end
+CSV.open("results/step10_memory.csv", "w") do |csv|
+  csv << %w[events store target data_bytes index_bytes ruby_version pg_version valkey_version]
+  memory.each { |row| csv << row + versions }
+end
+puts "saved: results/step10_ops.csv, results/step10_memory.csv"
