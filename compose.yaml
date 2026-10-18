@@ -2,14 +2,14 @@ services:
   valkey:
     image: valkey/valkey:9.0
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379" # この PC からのみ接続可（LAN には公開しない）
 
   postgres:
     image: pgvector/pgvector:pg17 # PostgreSQL 17 + pgvector（Vector Search 用）
     environment:
       POSTGRES_PASSWORD: postgres # ローカル検証専用のパスワード
     ports:
-      - "5433:5432" # Mac 側の 5432 は別プロジェクトが使用中のため 5433
+      - "127.0.0.1:5433:5432" # この PC からのみ接続可。5432 は別プロジェクトが使用中のため 5433
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
