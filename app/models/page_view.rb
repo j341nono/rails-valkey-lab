@@ -30,12 +30,14 @@ class PageView < ApplicationRecord
     end
   end
 
-  # 方式C: ZUNIONSTORE で7日分を合算し、ZRANGE で取得する。2つのコマンドは1往復で送る
+  # 方式C: ZUNIONSTORE で7日分を合算し、ZRANGE で取得する。コマンドはまとめて1往復で送る
+  # 集計結果の dest は一時的なキーなので、60秒で消えるようにする
   def self.top_from_valkey(today: Date.current, limit: 10, weighted: false)
     dest = "page_views:top:#{today.strftime('%Y%m%d')}:#{weighted ? 'weighted' : 'simple'}"
     _, top = VALKEY.pipelined do |pipe|
       pipe.zunionstore(dest, last_7_days(today).map { |d| daily_key(d) }, weights: weighted ? WEIGHTS : nil)
       pipe.zrange(dest, 0, limit ? limit - 1 : -1, rev: true, with_scores: true)
+      pipe.expire(dest, 60)
     end
     top.map { |article_id, score| [ article_id.to_i, score.to_i ] }
   end
