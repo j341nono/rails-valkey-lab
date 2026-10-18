@@ -62,7 +62,7 @@ Kaigi on Rails 2026の講演「そのValkey、使いこなしていますか？�
 
 最終測定時:
 - UTM上のUbuntu ARM64 VM
-- Docker ComposeでRails・PostgreSQL・Valkeyを別コンテナとして実行する
+- Docker ComposeでRails・PostgreSQL・Valkeyを別コンテナとして実行する（k8s/k3sは使わない。k3sは最後の追加実験のみ）
 - GitHubからcloneして環境を再現する
 
 最終的な性能比較はUbuntu VM内で条件を揃えて行う。
@@ -80,8 +80,9 @@ Step 6: Active Record + PostgreSQLを導入する
 Step 7: 閲覧イベントをPostgreSQLとValkeyに記録し、直近7日間Top 10が一致することを確認する  
 Step 8: ランキングの投入時間・集計時間・メモリ使用量を比較する（WEIGHTSは追加実験）  
 Step 9: pgvectorとValkey SearchでVector Searchを実装・比較する  
-Step 10: GitHub経由でUbuntu VMに移し、最終測定する  
+Step 10: GitHub経由でUbuntu VMに移し、Docker Composeで最終測定する（Railsもコンテナ化。CPU・メモリ上限、ネットワーク遅延を数段階で測定）  
 Step 11: 結果を整理して共有会で発表する  
+追加実験（Step 11の後）: 同じ測定をk3sでも行い、Composeとの差を見る  
 
 ## 最重要ルール
 
