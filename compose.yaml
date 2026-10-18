@@ -1,11 +1,12 @@
 services:
   valkey:
-    image: valkey/valkey:9.0
+    image: valkey/valkey-bundle:9.0 # Valkey 9.0 + valkey-search（Vector Search 用）
     ports:
       - "127.0.0.1:6380:6379" # この PC からのみ接続可（LAN には公開しない）
 
   postgres:
     image: pgvector/pgvector:pg17 # PostgreSQL 17 + pgvector（Vector Search 用）
+    shm_size: 1g # HNSW インデックスの並列作成に使う共有メモリ（Docker の既定 64MB では不足する）
     environment:
       POSTGRES_PASSWORD: postgres # ローカル検証専用のパスワード
     ports:

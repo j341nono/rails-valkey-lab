@@ -20,3 +20,5 @@ gem "redis", "~> 6.0"
 gem "csv", "~> 3.3"
 
 gem "pg", "~> 1.7"
+
+gem "neighbor", "~> 1.2"

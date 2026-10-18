@@ -10,9 +10,15 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_18_023104) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_18_025348) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+  enable_extension "vector"
+
+  create_table "items", force: :cascade do |t|
+    t.vector "embedding", limit: 128, null: false
+    t.index ["embedding"], name: "index_items_on_embedding", opclass: :vector_l2_ops, using: :hnsw
+  end
 
   create_table "page_views", force: :cascade do |t|
     t.bigint "article_id", null: false

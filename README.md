@@ -6,7 +6,7 @@ Kaigi on Rails 2026「そのValkey、使いこなしていますか？」の内�
 
 ```sh
 bundle install
-docker compose up -d   # Valkey (localhost:6380) と PostgreSQL (localhost:5433)
+docker compose up -d   # Valkey + valkey-search (localhost:6380) と PostgreSQL + pgvector (localhost:5433)
 bin/rails db:prepare   # DB作成 + マイグレーション
 ```
 
@@ -21,6 +21,7 @@ bin/rails runner script/step7_ranking_pg_valkey.rb   # 直近7日間ランキン
 bin/rails runner script/step8_benchmark_pg_valkey.rb # 旧方針・参考: PostgreSQL / Valkeyのみ → results/step8_*.csv（EVENTS=300000,3000000 で件数指定）
 bin/rails runner script/step9_pg_with_valkey.rb      # 方式A / 方式C の一致・保持期間・再構築の確認
 bin/rails runner script/step10_benchmark_a_vs_c.rb   # 方式A / 方式C の書き込み・取得・再構築・メモリ → results/step10_*.csv
+bin/rails runner script/step11_vector_search.rb      # pgvector / Valkey Search（HNSW）→ results/step11_*.csv（ITEMS=10000,100000 で件数指定）
 ```
 
 ## 停止
