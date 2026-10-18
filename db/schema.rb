@@ -10,13 +10,13 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_18_015733) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_18_023104) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
   create_table "page_views", force: :cascade do |t|
     t.bigint "article_id", null: false
     t.datetime "viewed_at", null: false
-    t.index ["viewed_at"], name: "index_page_views_on_viewed_at"
+    t.index ["viewed_at", "article_id"], name: "index_page_views_on_viewed_at_and_article_id"
   end
 end

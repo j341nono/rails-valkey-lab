@@ -19,6 +19,7 @@ bin/rails runner script/step4_benchmark.rb           # 旧方針・参考: 集�
 bin/rails runner script/step5_weighted_ranking.rb    # 旧方針・参考: WEIGHTS → results/step5_weighted_ranking.csv
 bin/rails runner script/step7_ranking_pg_valkey.rb   # 直近7日間ランキング（PostgreSQL / Valkey）
 bin/rails runner script/step8_benchmark_pg_valkey.rb # 旧方針・参考: PostgreSQL / Valkeyのみ → results/step8_*.csv（EVENTS=300000,3000000 で件数指定）
+bin/rails runner script/step9_pg_with_valkey.rb      # 方式A / 方式C の一致・保持期間・再構築の確認
 ```
 
 ## 停止

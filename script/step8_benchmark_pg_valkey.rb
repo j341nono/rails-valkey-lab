@@ -26,6 +26,10 @@ COMPOSITE_INDEX = "index_page_views_on_viewed_at_and_article_id"
 
 ActiveRecord::Base.logger = nil # SQL ログの書き込み時間を測定に含めない
 DB = ActiveRecord::Base.connection
+PageView.sync_valkey = false # このスクリプトの create! は PostgreSQL だけに書く（Step 9 の after_create_commit を止める）
+# Step 9 のマイグレーションで viewed_at 単独インデックスは複合インデックスに置き換えた。
+# このスクリプトは viewed_at のみ → 複合追加 の順に測るので、最初に viewed_at 単独に戻し、最後に元へ戻す
+DB.add_index(:page_views, :viewed_at) unless DB.index_exists?(:page_views, :viewed_at)
 
 def elapsed_ms
   start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -146,7 +150,8 @@ EVENT_SIZES.each do |events|
   end
 end
 
-DB.remove_index(:page_views, name: COMPOSITE_INDEX) if DB.index_name_exists?(:page_views, COMPOSITE_INDEX)
+DB.add_index(:page_views, [ :viewed_at, :article_id ], name: COMPOSITE_INDEX) unless DB.index_name_exists?(:page_views, COMPOSITE_INDEX)
+DB.remove_index(:page_views, :viewed_at) # db/schema.rb と同じ状態に戻す
 
 FileUtils.mkdir_p("results")
 versions = [ RUBY_VERSION, pg_version, valkey_version ]
