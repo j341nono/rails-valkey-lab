@@ -64,6 +64,7 @@ Kaigi on Rails 2026の講演「そのValkey、使いこなしていますか？�
 - 技術検証が目的であり、完成度の高いプロダクトは不要。
 - 講演資料のように、短く理解しやすいコードを優先する。
 - Web UI、認証、CRUD機能、過度な抽象化、不要な依存ライブラリは作らない・入れない。
+- 例外として、発表用デモ（Step 13）ではランキングを体験できる画面を1枚だけ作る。
 - `rails runner` またはRakeタスクで実験できればよい。
 - ただし、測定結果の正確性と再現性は確保する。
 
@@ -96,8 +97,9 @@ Step 9: 方式Cを実装する（`after_create_commit` で `ZINCRBY`、`EXPIRE`�
 Step 10: AとCを比較測定する（書き込み・ランキング取得・メモリ・再構築時間。WEIGHTSを含む）  
 Step 11: pgvectorとValkey SearchでVector Searchを実装・比較する  
 Step 12: GitHub経由でUbuntu VMに移し、Docker Composeで最終測定する（Railsもコンテナ化。CPU・メモリ上限、ネットワーク遅延を数段階で測定）  
-Step 13: 結果を整理して共有会で発表する  
-追加実験（Step 13の後）: 同じ測定をk3sでも行い、Composeとの差を見る  
+Step 13: 発表用デモを公開する（ランキング画面1枚。Cloudflare Tunnelで公開し、production起動・`rate_limit`・デモ専用DB。PostgreSQL/Valkeyのポートは外部に出さない）  
+Step 14: 結果を整理して共有会で発表する  
+追加実験（Step 14の後）: 同じ測定をk3sでも行い、Composeとの差を見る  
 
 ## 最重要ルール
 
