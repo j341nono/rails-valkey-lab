@@ -2,8 +2,11 @@
 # 実行: bin/rails runner script/step10_benchmark_a_vs_c.rb
 #       件数を変える場合: EVENTS=300000,3000000 bin/rails runner script/step10_benchmark_a_vs_c.rb
 # 結果: results/step10_ops.csv（書き込み・ランキング取得・再構築の時間）, results/step10_memory.csv
+#       コンテナで遅延を入れる場合: docker compose run --rm -e NET_DELAY=1ms app bin/rails runner script/step10_benchmark_a_vs_c.rb
 require "csv"
 
+# NET_DELAY（コンテナ実行時のネットワーク遅延。例: 1ms）ごとに結果ファイルを分ける
+SUFFIX = ENV["NET_DELAY"].present? ? "_delay#{ENV['NET_DELAY']}" : ""
 EVENT_SIZES = ENV.fetch("EVENTS", "300000,3000000").split(",").map(&:to_i) # 30日間の総イベント数
 ARTICLES = 10_000
 TODAY = Date.current # 保持期間（EXPIREAT）が実時刻で判定されるため、今日を基準にする
@@ -42,6 +45,10 @@ end
 
 versions = [ RUBY_VERSION, DB.select_value("SHOW server_version")[/\S+/], VALKEY.info("server")["valkey_version"] ]
 puts "Ruby #{versions[0]} / PostgreSQL #{versions[1]} / Valkey #{versions[2]}"
+# 実際の往復時間。NET_DELAY の効き方は環境で異なるため、指定値ではなく実測値を記録する
+rtt = ->(&b) { Array.new(200) { elapsed_ms(&b) }.sort[100].round(3) }
+rtts = [ rtt.() { VALKEY.ping }, rtt.() { DB.select_value("SELECT 1") } ]
+puts "往復時間（中央値）: Valkey #{rtts[0]} ms / PostgreSQL #{rtts[1]} ms"
 ops = []
 memory = []
 
@@ -97,12 +104,12 @@ EVENT_SIZES.each do |events|
 end
 
 FileUtils.mkdir_p("results")
-CSV.open("results/step10_ops.csv", "w") do |csv|
-  csv << %w[events method operation median_ms p95_ms min_ms max_ms rails_allocated_objects ruby_version pg_version valkey_version]
-  ops.each { |row| csv << row + versions }
+CSV.open("results/step10_ops#{SUFFIX}.csv", "w") do |csv|
+  csv << %w[events method operation median_ms p95_ms min_ms max_ms rails_allocated_objects valkey_rtt_ms pg_rtt_ms ruby_version pg_version valkey_version]
+  ops.each { |row| csv << row + rtts + versions }
 end
-CSV.open("results/step10_memory.csv", "w") do |csv|
-  csv << %w[events store target data_bytes index_bytes ruby_version pg_version valkey_version]
-  memory.each { |row| csv << row + versions }
+CSV.open("results/step10_memory#{SUFFIX}.csv", "w") do |csv|
+  csv << %w[events store target data_bytes index_bytes valkey_rtt_ms pg_rtt_ms ruby_version pg_version valkey_version]
+  memory.each { |row| csv << row + rtts + versions }
 end
-puts "saved: results/step10_ops.csv, results/step10_memory.csv"
+puts "saved: results/step10_*#{SUFFIX}.csv（NET_DELAY=#{ENV["NET_DELAY"].presence || "なし"}）"

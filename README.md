@@ -24,6 +24,17 @@ bin/rails runner script/step10_benchmark_a_vs_c.rb   # 方式A / 方式C の書�
 bin/rails runner script/step11_vector_search.rb      # pgvector / Valkey Search（HNSW）→ results/step11_*.csv（ITEMS=10000,100000 で件数指定）
 ```
 
+## コンテナで実行（最終測定用）
+
+Rails もコンテナで動かす。各コンテナは CPU 2・メモリ 2GB に制限している。
+
+```sh
+docker compose build app
+docker compose run --rm app bin/rails db:prepare
+docker compose run --rm app bin/rails runner script/step10_benchmark_a_vs_c.rb
+docker compose run --rm -e NET_DELAY=1ms app bin/rails runner script/step10_benchmark_a_vs_c.rb # 通信に遅延を入れる
+```
+
 ## 停止
 
 ```sh

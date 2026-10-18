@@ -3,6 +3,8 @@ services:
     image: valkey/valkey-bundle:9.0 # Valkey 9.0 + valkey-search（Vector Search 用）
     ports:
       - "127.0.0.1:6380:6379" # この PC からのみ接続可（LAN には公開しない）
+    cpus: 2
+    mem_limit: 2g
 
   postgres:
     image: pgvector/pgvector:pg17 # PostgreSQL 17 + pgvector（Vector Search 用）
@@ -13,6 +15,23 @@ services:
       - "127.0.0.1:5433:5432" # この PC からのみ接続可。5432 は別プロジェクトが使用中のため 5433
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    cpus: 2
+    mem_limit: 2g
+
+  # 測定用の Rails。docker compose up では起動せず、docker compose run で実験ごとに起動する
+  app:
+    build: .
+    profiles: [ bench ]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      VALKEY_URL: redis://valkey:6379/0
+    cap_add: [ NET_ADMIN ] # tc でネットワーク遅延を入れるため
+    volumes:
+      - ./results:/app/results # 測定結果の CSV をホスト側に残す
+    depends_on: [ postgres, valkey ]
+    cpus: 2
+    mem_limit: 2g
 
 volumes:
   postgres_data:

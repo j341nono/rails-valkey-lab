@@ -2,8 +2,11 @@
 # 実行: bin/rails runner script/step11_vector_search.rb
 #       件数を変える場合: ITEMS=10000,100000 bin/rails runner script/step11_vector_search.rb
 # 結果: results/step11_build.csv（投入・インデックス作成・メモリ）, results/step11_search.csv（検索時間・Recall@10）
+#       コンテナで遅延を入れる場合: docker compose run --rm -e NET_DELAY=1ms app bin/rails runner script/step11_vector_search.rb
 require "csv"
 
+# NET_DELAY（コンテナ実行時のネットワーク遅延。例: 1ms）ごとに結果ファイルを分ける
+SUFFIX = ENV["NET_DELAY"].present? ? "_delay#{ENV['NET_DELAY']}" : ""
 ITEM_SIZES = ENV.fetch("ITEMS", "10000,100000").split(",").map(&:to_i)
 DIM = 128
 CLUSTERS = 50     # 実際の埋め込みに近づけるため、50個の中心のまわりに散らばるデータにする
@@ -45,6 +48,10 @@ valkey_memory = -> { [ VALKEY.info("memory")["used_memory"].to_i, VALKEY.info("s
 
 versions = [ RUBY_VERSION, DB.select_value("SHOW server_version")[/\S+/], DB.select_value("SELECT extversion FROM pg_extension WHERE extname = 'vector'"), VALKEY.info("server")["valkey_version"] ]
 puts "Ruby #{versions[0]} / PostgreSQL #{versions[1]} + pgvector #{versions[2]} / Valkey #{versions[3]}"
+# 実際の往復時間。NET_DELAY の効き方は環境で異なるため、指定値ではなく実測値を記録する
+rtt = ->(&b) { Array.new(200) { elapsed_ms(&b) }.sort[100].round(3) }
+rtts = [ rtt.() { VALKEY.ping }, rtt.() { DB.select_value("SELECT 1") } ]
+puts "往復時間（中央値）: Valkey #{rtts[0]} ms / PostgreSQL #{rtts[1]} ms"
 build_rows = []
 search_rows = []
 
@@ -114,12 +121,12 @@ ITEM_SIZES.each do |items|
 end
 
 FileUtils.mkdir_p("results")
-CSV.open("results/step11_build.csv", "w") do |csv|
-  csv << %w[items store insert_ms index_build_ms data_bytes index_bytes ruby_version pg_version pgvector_version valkey_version]
-  build_rows.each { |row| csv << row + versions }
+CSV.open("results/step11_build#{SUFFIX}.csv", "w") do |csv|
+  csv << %w[items store insert_ms index_build_ms data_bytes index_bytes valkey_rtt_ms pg_rtt_ms ruby_version pg_version pgvector_version valkey_version]
+  build_rows.each { |row| csv << row + rtts + versions }
 end
-CSV.open("results/step11_search.csv", "w") do |csv|
-  csv << %w[items store ef_search median_ms p95_ms min_ms max_ms recall_at_10 pg_scan ruby_version pg_version pgvector_version valkey_version]
-  search_rows.each { |row| csv << row + versions }
+CSV.open("results/step11_search#{SUFFIX}.csv", "w") do |csv|
+  csv << %w[items store ef_search median_ms p95_ms min_ms max_ms recall_at_10 pg_scan valkey_rtt_ms pg_rtt_ms ruby_version pg_version pgvector_version valkey_version]
+  search_rows.each { |row| csv << row + rtts + versions }
 end
-puts "saved: results/step11_build.csv, results/step11_search.csv"
+puts "saved: results/step11_*#{SUFFIX}.csv（NET_DELAY=#{ENV["NET_DELAY"].presence || "なし"}）"
