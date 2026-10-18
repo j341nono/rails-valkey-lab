@@ -15,3 +15,4 @@ group :development, :test do
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
 end
 
+gem "redis", "~> 6.0"
