@@ -1,3 +1,11 @@
 .DS_Store
 references/
 
+# Rails
+/.bundle
+/log/*
+/tmp/*
+/public/assets
+
+# Ignore key files for decrypting credentials and more.
+/config/*.key
