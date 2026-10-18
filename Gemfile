@@ -16,3 +16,5 @@ group :development, :test do
 end
 
 gem "redis", "~> 6.0"
+
+gem "csv", "~> 3.3"
