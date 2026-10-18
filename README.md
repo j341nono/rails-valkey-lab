@@ -1,24 +1,26 @@
-# README
+# rails-valkey-lab
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+Kaigi on Rails 2026「そのValkey、使いこなしていますか？」の内容を Rails で検証するリポジトリ。
 
-Things you may want to cover:
+## セットアップ
 
-* Ruby version
+```sh
+bundle install
+docker compose up -d   # Valkey (localhost:6380) と PostgreSQL (localhost:5433)
+bin/rails db:create
+```
 
-* System dependencies
+## 実行
 
-* Configuration
+```sh
+bin/rails runner script/step2_sorted_set.rb       # Sorted Set の基本操作
+bin/rails runner script/step3_ranking.rb          # 直近7日間ランキング（Ruby Hash / Valkey）
+bin/rails runner script/step4_benchmark.rb        # 集計時間・メモリ → results/step4_ranking.csv
+bin/rails runner script/step5_weighted_ranking.rb # WEIGHTS → results/step5_weighted_ranking.csv
+```
 
-* Database creation
+## 停止
 
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
+```sh
+docker compose down
+```
