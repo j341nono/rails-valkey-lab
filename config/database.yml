@@ -1,0 +1,23 @@
+# 接続先は環境変数で切り替える
+# - Mac で Rails を直接実行: 既定値（localhost:5433）のまま
+# - コンテナで Rails を実行: POSTGRES_HOST=postgres POSTGRES_PORT=5432 を指定
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  host: <%= ENV.fetch("POSTGRES_HOST", "localhost") %>
+  port: <%= ENV.fetch("POSTGRES_PORT", 5433) %>
+  username: <%= ENV.fetch("POSTGRES_USER", "postgres") %>
+  password: <%= ENV.fetch("POSTGRES_PASSWORD", "postgres") %>
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS", 5) %>
+
+development:
+  <<: *default
+  database: rails_valkey_lab_development
+
+test:
+  <<: *default
+  database: rails_valkey_lab_test
+
+production:
+  <<: *default
+  database: rails_valkey_lab_production
